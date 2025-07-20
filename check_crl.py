@@ -14,6 +14,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+# Chris Share <cjs59@cam.ac.uk> - 2025-7-17
+# Changelog: - fix UnicodeDecodeError when reading a DER CRL
+#            - make output format more consistent with other Nagios plugins
+#            - change getopt to argparse, allowing options in a file
+
 # Mark Ruys <mark.ruys@peercode.nl> - 2015-8-27
 # Changelog: - catch openssl parsing errors
 #            - clean up temporary file on error
@@ -35,13 +40,21 @@
 
 import time
 import datetime
-import getopt
+import argparse
 import os
 import pprint
 import subprocess
 import sys
 import tempfile
 import urllib.request, urllib.parse, urllib.error
+
+
+class FileArgumentParser(argparse.ArgumentParser):
+    """Arguments file split on spaces, not newlines."""
+
+    def convert_arg_line_to_args(self, arg_line):
+        return arg_line.split()
+
 
 def check_crl(url, warn, crit):
     tmpcrl = tempfile.mktemp(".crl")
@@ -99,39 +112,23 @@ def check_crl(url, warn, crit):
     print (msg)
     sys.exit(exitcode)
 
-def usage():
-    print ("check_crl.py -h|--help -v|--verbose -u|--url=<url> -w|--warning=<minutes> -c|--critical=<minutes>")
-    print ("")
-    print ("Example, if you want to get a warning if a CRL expires in 8 hours and a critical if it expires in 6 hours:")
-    print ("./check_crl.py -u \"http://domain.tld/url/crl.crl\" -w 480 -c 360")
-
 def main():
-    try:
-        opts, args = getopt.getopt(sys.argv[1:], "hu:w:c:", ["help", "url=", "warning=", "critical="])
-    except getopt.GetoptError as err:
-        usage()
-        sys.exit(2)
-    url = None
-    warning = None
-    critical = None
-    for o, a in opts:
-        if o in ("-h", "--help"):
-            usage()
-            sys.exit()
-        elif o in ("-u", "--url"):
-            url = a
-        elif o in ("-w", "--warning"):
-            warning = a
-        elif o in ("-c", "--critical"):
-            critical = a
-        else:
-            assert False, "unhandled option"
+    parser = FileArgumentParser(
+        description = "Check the expiry of the CRL at a URL",
+        epilog = "Example with a warning threshold of 8 hours and critical threshold of 6 hours:\n\n"
+                 "  ./check_crl.py -u 'http://domain.tld/url/crl.crl' -w 480 -c 360\n\n"
+                 "Example with a warning threshold of 60 days and critical threshold of 30 days:\n\n"
+                 "  ./check_crl.py -u 'http://domain.tld/url/crl.crl' -w 86400 -c 43200",
+        formatter_class = argparse.RawDescriptionHelpFormatter,
+        fromfile_prefix_chars = "@"
+    )
+    parser.add_argument("-u", "--url", help="CRL URL", required=True)
+    parser.add_argument("-w", "--warning", help="Expiry warning threshold in minutes", required=True)
+    parser.add_argument("-c", "--critical", help="Expiry critical threshold in minutes", required=True)
 
-    if url != None and warning != None and critical != None:
-        check_crl(url, int(warning), int(critical))
-    else:
-        usage()
-        sys.exit(2)
+    args = parser.parse_args()
+
+    check_crl(args.url, int(args.warning), int(args.critical))
 
 
 if __name__ == "__main__":
