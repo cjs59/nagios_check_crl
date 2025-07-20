@@ -55,7 +55,7 @@ def check_crl(url, warn, crit):
 
     try:
         inform = 'DER'
-        crlfile = open(tmpcrl, "r")
+        crlfile = open(tmpcrl, "r", errors="ignore")
         for line in crlfile:
             if "BEGIN X509 CRL" in line:
                 inform = 'PEM'
