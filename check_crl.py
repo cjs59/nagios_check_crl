@@ -84,16 +84,16 @@ def check_crl(url, warn, crit):
         unit = "days"
     gmtstr = time.asctime(time.localtime(eol))
     if minutes < 0:
-        msg = "CRITICAL CRL expired %d %s ago (on %s GMT)" % (-expires, unit, gmtstr)
+        msg = "CRL CRITICAL - %s expired %d %s ago (on %s GMT)" % (url, -expires, unit, gmtstr)
         exitcode = 2
     elif minutes <= crit:
-        msg = "CRITICAL CRL expires in %d %s (on %s GMT)" % (expires, unit, gmtstr)
+        msg = "CRL CRITICAL - %s expires in %d %s (on %s GMT)" % (url, expires, unit, gmtstr)
         exitcode = 2
     elif minutes <= warn:
-        msg = "WARNING CRL expires in %d %s (on %s GMT)" % (expires, unit, gmtstr)
+        msg = "CRL WARNING - %s expires in %d %s (on %s GMT)" % (url, expires, unit, gmtstr)
         exitcode = 1
     else:
-        msg = "OK CRL expires in %d %s (on %s GMT)" % (expires, unit, gmtstr)
+        msg = "CRL OK - %s expires in %d %s (on %s GMT)" % (url, expires, unit, gmtstr)
         exitcode = 0
 
     print (msg)
