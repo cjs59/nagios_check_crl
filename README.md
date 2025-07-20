@@ -1,66 +1,85 @@
-### Nagios plugin to check CRL expiry in hours
+### Nagios plugin to check CRL expiry in minutes
+
+This is a nagios plugin which you can use to check if a CRL (Certificate Revocation List, public list with revoked certificates) is still valid.
+
+Forked from [Remy van Elst](https://github.com/RaymiiOrg/nagios)'s check_crl.
 
 
-This is a nagios plugin which you can use to check if a CRL (Certificate Revocation List, public list with revoked certificates) is still valid. This is based on the check_crl.py plugin from [Michele Baldessari](http://acksyn.org/?p=690). It is modified it so that it checks the time in minutes (for more precision) instead of days, it has a GMT time comparison bug fixed and I've added error handling so that if the plugin cannot get a crl file (because the webserver is down) it gives a Critical error in nagios.
+#### Installation
 
-#### Download
-
-[Download the plugin from my github](https://github.com/RaymiiOrg/nagios)  
-[Download the plugin from raymii.org](https://raymii.org/s/inc/downloads/check_crl.py)  
-
-#### Install and Usage
-
-This guide covers the steps needed for Ubuntu 10.04/12.04 and Debian 6. It should also work on other distro's, but make sure to modify the commands where needed. 
+This guide covers the steps needed for Debian 12. It should also work on other distros, but make sure to modify the commands where needed.
 
 Make sure you have openssl, python3 and a module needed by the script installed on the nagios host:
 
     apt-get install python3 openssl python-m2crypto
 
-Now place the script on the host. I've placed in */etc/nagios/plugins/check_crl.py*.
+Now checkout the script on the host. I've placed in */opt/nagios_check_crl/* - create this with appropriate permissions first.
 
-    wget -O /etc/nagios/plugins/check_crl.py http://raymii.org/s/inc/downloads/check_crl.py
+    git clone https://github.com/cjs59/nagios_check_crl.git /opt/nagios_check_crl
 
-Make sure the script is executable:
+Now test the script. I'm using the URL of the LetsEncrypt root CA CRL.
 
-    chmod +x /etc/nagios/plugins/check_crl.py
+    /opt/nagios_check_crl/check_crl.py -u http://x1.c.lencr.org/ -w 480 -c 360
+    CRL OK - http://x1.c.lencr.org/ expires in 113 days (on Mon Nov 10 23:59:59 2025 GMT)
 
-Now test the script. I'm using the URL of the Comodo CA CRL file which is the CA that signed my certificate for raymii.org.
+    /opt/nagios_check_crl/check_crl.py -u http://x1.c.lencr.org/ -w 432000 -c 360
+    CRL WARNING - http://x1.c.lencr.org/ expires in 113 days (on Mon Nov 10 23:59:59 2025 GMT)
+
+    /opt/nagios_check_crl/check_crl.py -u http://x1.c.lencr.org/ -w 432000 -c 432000
+    CRL CRITICAL - http://x1.c.lencr.org/ expires in 113 days (on Mon Nov 10 23:59:59 2025 GMT)
 
 
-    /etc/nagios/plugins/check_crl.py -h http://crl.comodoca.com/PositiveSSLCA2.crl -w 480 -c 360
-    OK CRL Expires in 5109 minutes (on Thu May  9 07:30:32 2013 GMT)
-
-    /etc/nagios/plugins/check_crl.py -h http://crl.comodoca.com/PositiveSSLCA2.crl -w 5200 -c 360
-    WARNING CRL Expires in 5108 minutes (on Thu May  9 07:30:32 2013 GMT)
-
-    /etc/nagios/plugins/check_crl.py -h http://crl.comodoca.com/PositiveSSLCA2.crl -w 5000 -c 5300
-    CRITICAL CRL Expires in 5108 minutes (on Thu May  9 07:30:32 2013 GMT)
+#### Usage
 
 Lets add the nagios command:
 
-    define command{
-        command_name    crl_check
-        command_line    /etc/nagios-plugins/check_crl.py -u $ARG1$ -w $ARG2$ -c $ARG3$
+    define command {
+        command_name            check_crl
+        command_line            /opt/nagios_check_crl/check_crl.py -u $ARG1$ -w $ARG2$ -c $ARG3$
     }
 
 And lets add the command to a service check:
 
     define service {
-            use                             generic-service
-            host_name                       localhost
-            service_description             Comodo PositiveSSL CA2 CRL
-            contact                         nagiosadmin                 
-            check_command                   crl_check!http://crl.comodoca.com/PositiveSSLCA2.crl!24!12
+        use                     generic-service
+        host_name               localhost
+        service_description     Lets Encrypt root CRL
+        contacts                nagiosadmin
+        check_command           check_crl!http://x1.c.lencr.org/!480!360
     }
 
 The above service check runs on the nagios defined host "localhost", uses the (default) service template "generic-service" and had the contact "nagiosadmin". As you can see, the URL maps to $ARG1$, the warning hours to $ARG2$ and the critical hours to $ARG3$. This means that if the field *"Next Update:"* is less then 8 hours in the future you get a warning and if it is less then 6 hours you get a critical.
 
-#### Changelog
+Alternatively, store the service configuration in a file, which makes it easier when generating the Nagios configuration from an IP registration database.
 
-03-04-2013:
-- Changed time to minutes for more precision
-- Fixed timezone bug by comparing GMT with GMT
+    define command {
+        command_name            check_crl
+        command_line            /opt/nagios_check_crl/check_crl.py @'/etc/nagios4/crl/$HOSTNAME$.ini'
+    }
 
-06-11-2012:
-- Changed checking interval from dates to hours
-- Added error catching if a crl file cannot be retreived
+    define service {
+        use                     generic-service
+        hostgroup_name          crl-servers
+        service_description     CRL
+        contacts                nagiosadmin
+        check_command           check_crl
+    }
+
+    define hostgroup {
+        hostgroup_name          crl-servers
+        alias                   CRL Servers
+        members                 root-ca-server,intermediate-ca-server
+    }
+
+/etc/nagios4/crl/root-ca-server.ini contains:
+
+    --url http://root-ca-server.domain/crl
+    --warning 86400
+    --critical 43200
+
+/etc/nagios4/crl/intermediate-ca-server.ini contains:
+
+    --url http://intermediate-ca-server.domain/crl
+    --warning 480
+    --critical 360
+
