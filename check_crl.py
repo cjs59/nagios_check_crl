@@ -58,7 +58,6 @@ class FileArgumentParser(argparse.ArgumentParser):
 
 def check_crl(url, warn, crit):
     tmpcrl = tempfile.mktemp(".crl")
-    #request = urllib.request.urlretrieve(url, tmpcrl)
     try:
         urllib.request.urlretrieve(url, tmpcrl)
     except:
